@@ -56,16 +56,17 @@ def log_wait_raise(logger, process):
 # the original:
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
 
-def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex')):
+def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), memory_buffer=False):
     exit_code, output = None, None
-
-    # separate implementations depending on expected size of output (size hint argument)?
-    #   see SpooledTemporaryFile!  STF is only good until we call fileno(), which happens first thing in sp.Popen()
-    #     otherwise, it's perfect :/
 
     stderr_arg = None if ignore_stderr else subprocess.STDOUT
 
-    with contextlib.closing(tempfile.TemporaryFile()) as outfile:
+    if memory_buffer is True:
+        outfile = subprocess.PIPE
+    else:
+        outfile = tempfile.TemporaryFile()
+
+    with closing(outfile):
         if logger is not None:
             logger.info('ex(%d, "%s")', timeout_seconds, command)
 
@@ -78,7 +79,8 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
             with timeout_process(timeout_seconds, p.pid, logger):
                 exit_code = p.wait()
 
-        outfile.seek(0)
+        if memory_buffer is False:
+            outfile.seek(0)
         output = outfile.read() # TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
 
         return exit_code, output
