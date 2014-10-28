@@ -5,23 +5,9 @@ from Ex import ex
 from contextlib import contextmanager
 from datetime import datetime
 import time
-
-class MemorizingLogger(object):
-    def __init__(self):
-        self.messages = []
-
-    def info(self, *message):
-        self.messages.append( ( 'info', message, ) )
-
-    def debug(self, *message):
-        self.messages.append( ( 'debug', message, ) )
-
-    def has_message_containing(self, needle):
-        print self.messages
-        for message in self.messages:
-            if needle in ''.join(map(str, message[1])):
-                return True
-        return False
+import logging
+import os, tempfile
+import subprocess
 
 class PidMemorizer(object):
     def __init__(self):
@@ -47,15 +33,20 @@ def timed(timer):
     yield
     timer.stop()
 
+def delete_even_if_it_doesnt_exist(path):
+    subprocess.call("rm -rf {}".format(path), shell=True)
+
 class ExTest(unittest.TestCase):
     RANDOM_MEGABYTES_OF_STDOUT_CMD = "dd if=/dev/urandom of=/dev/stdout bs=1048576 count={} 2>/dev/null"
+    LOG_PATH = os.path.join(tempfile.gettempdir(), 'ex_tests.log')
 
     def setUp(self):
         self.timer = Timer()
-        self.logger = MemorizingLogger()
+        delete_even_if_it_doesnt_exist(self.LOG_PATH)
+        self.logger = logging.getLogger('mikep.ex')
 
     def tearDown(self):
-        pass
+        delete_even_if_it_doesnt_exist(self.LOG_PATH)
 
     def test_exit_code(self):
         r, out = ex(0, "exit 1")
@@ -120,15 +111,19 @@ class ExTest(unittest.TestCase):
 
     def test_logging(self):
         command = 'echo "hello world"'
-        self.assertEqual(len(self.logger.messages), 0)
+        self.logger.addHandler(logging.FileHandler(self.LOG_PATH))
+        self.logger.setLevel(logging.DEBUG)
         r, out = ex(0, command, logger=self.logger)
-        self.assertGreater(len(self.logger.messages), 0)
+        log_text = open(self.LOG_PATH).read()
+        self.assertGreater(len(log_text), 0)
 
     def test_pid_kill_logging(self):
         pm = PidMemorizer()
+        self.logger.addHandler(logging.FileHandler(self.LOG_PATH))
+        self.logger.setLevel(logging.DEBUG)
         r, out = ex(2, "sleep 8", pid_callback=pm, logger=self.logger)
-        # this fails because the logger that sleepy_killer sees is a copy of the one we have.  sleepy_killer is a different process!
-        self.assertTrue(self.logger.has_message_containing(str(pm.pid)))
+        log_text = open(self.LOG_PATH).read()
+        self.assertIn(str(pm.pid), log_text)
 
     @unittest.skip("niy")
     def test_futuristic_timeouts(self):
@@ -185,4 +180,8 @@ class ExTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    # logger = logging.getLogger('mikep.ex')
+    # logger.setLevel(logging.DEBUG)
+    # logger.addHandler(logging.StreamHandler())
+
     unittest.main()

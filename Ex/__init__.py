@@ -2,28 +2,26 @@
 # See also POSIX users (Linux, BSD, etc.) are strongly encouraged to install and use the much more recent subprocess32 module
 # instead of the version included with python 2.7. It is a drop in replacement with better behavior in many situations.
 
-import subprocess, multiprocessing, time, signal, os, contextlib
+import subprocess, multiprocessing, time, signal, os, contextlib, logging
 import tempfile
 
 # FIXME: make it work on windows :/
 #        see how subprocess implements terminate() for windows, and do that.  or if possible through some magic,
 #        call subprocess.Popen.terminate() directly and let them maintain the if/else logic
 #       don't forget child procs
+#       maybe use sudo iff an env var asks for it
 #
-def sleepy_killer(sleep_seconds, pid_to_kill):
+def sleepy_killer(sleep_seconds, pid_to_kill, logger):
     # FIXME: kill child processes also
     #
-    # FIXME: might as well make this work with logging.  we will eventually need to debug it, so make it loggable by default.
-    #        note: the obvious solution is to pass in a logger obj from ex().  but we're in a separate process so that will only be a copy
-    #              it probably works, but it's hard to test unless maybe we move to a file based logger
-    #               will we end up with concurrency issues (scrambled logs) if we do that?
     time.sleep(sleep_seconds)
+    logger.debug("sleepy_killer killing %d after %d seconds", pid_to_kill, sleep_seconds)
     os.kill(pid_to_kill, signal.SIGKILL)
 
 @contextlib.contextmanager
-def timeout_process(timeout_seconds, pid):
+def timeout_process(timeout_seconds, pid, logger):
     if timeout_seconds > 0:
-        killer = multiprocessing.Process(target=sleepy_killer, args=(timeout_seconds, pid))
+        killer = multiprocessing.Process(target=sleepy_killer, args=(timeout_seconds, pid, logger))
         killer.start()
         yield
         killer.terminate()
@@ -34,7 +32,7 @@ def timeout_process(timeout_seconds, pid):
 # the original:
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
 
-def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=None):
+def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex')):
     # FIXME: When using shell=True, pipes.quote() can be used to properly escape whitespace and shell metacharacters in
     #        strings that are going to be used to construct shell commands.
 
@@ -48,12 +46,16 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
         if logger is not None:
             logger.info('ex(%d, "%s")', timeout_seconds, command)
 
+        # FIXME: don't leak the process, always wait() on it
+        #
         p = subprocess.Popen(command, shell=True, stderr=stderr_arg, stdout=outfile)
 
         if pid_callback is not None:
+            # FIXME: log and re-raise exceptions here
+            #
             pid_callback(p.pid)
 
-        with timeout_process(timeout_seconds, p.pid):
+        with timeout_process(timeout_seconds, p.pid, logger):
             exit_code = p.wait()
 
         outfile.seek(0)
