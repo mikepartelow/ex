@@ -3,6 +3,7 @@
 # instead of the version included with python 2.7. It is a drop in replacement with better behavior in many situations.
 
 import subprocess, multiprocessing, time, signal, os, contextlib
+import tempfile
 
 # FIXME: make it work on windows :/
 #
@@ -18,6 +19,7 @@ def timeout_process(timeout_seconds, pid):
         killer = multiprocessing.Process(target=sleepy_killer, args=(timeout_seconds, pid,))
         killer.start()
         yield
+        killer.terminate()
         killer.join()
     else:
         yield
@@ -25,11 +27,17 @@ def timeout_process(timeout_seconds, pid):
 def ex(timeout_seconds, command):
     # FIXME: When using shell=True, pipes.quote() can be used to properly escape whitespace and shell metacharacters in
     #        strings that are going to be used to construct shell commands.
-    the_process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    with timeout_process(timeout_seconds, the_process.pid):
-        output = the_process.stdout.read()
+    # separate implementations depending on expected size of output (size hint argument)?
+    #   see SpooledTemporaryFile!  STF is only good until we call fileno(), which happens first thing in sp.Popen()
+    #     otherwise, it's perfect :/
 
-    exit_code = the_process.wait()
+    with contextlib.closing(tempfile.TemporaryFile()) as outfile:
+        p = subprocess.Popen(command, shell=True, stderr=subprocess.STDOUT, stdout=outfile)
 
-    return exit_code, output
+        with timeout_process(timeout_seconds, p.pid):
+            exit_code = p.wait()
+
+        outfile.seek(0)
+
+        return exit_code, outfile.read()
