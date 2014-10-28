@@ -33,6 +33,13 @@ def timed(timer):
     yield
     timer.stop()
 
+@contextmanager
+def stfu():
+    try:
+        yield
+    except:
+        pass
+
 def delete_even_if_it_doesnt_exist(path):
     subprocess.call("rm -rf {}".format(path), shell=True)
 
@@ -71,15 +78,7 @@ class ExTest(unittest.TestCase):
         self.assertEqual(out, "goodbye world\n")
 
     def test_large_output(self):
-        # perhaps *always* write to a file and then raise if the file is too big to return as a string
-        #  problem: stupid for known-small-output
-        #   solution: caller promises short input: ex(0, cmd, expect_short_input=True)
-        #      problem: what is "short"?  imprecise...
-        #   solution: caller promises long input: ex(0, cmd, expect_long_input=True)
-        #      problem: imprecise again...
-
-        # NOTE: tested this on macos and linux up to 1GB without problems (aside from slowness)
-        megabytes = 1
+        megabytes = 8
         r, out = ex(0, self.RANDOM_MEGABYTES_OF_STDOUT_CMD.format(megabytes))
         self.assertEqual(len(out), 1024 * 1024 * megabytes)
 
@@ -157,24 +156,20 @@ class ExTest(unittest.TestCase):
 
             self.assertTrue(pid_absent)
 
-    @unittest.skip("niy")
-    def test_futuristic_timeouts(self):
-        # we probably should return -9 for backcompat
-        # but we should also have some way to differentiate between ex's exit code and the subprocesses' exit code
-        #  possible solution: r is an object that is castable to int, but is not an int.
-        #      r, out = ex(2, "sleep 8")
-        #      self.assertEqual(-9, r)
-        #      self.assertTrue(r.timed_out)
-        #
-        #  even better, make the backcompat behavior opt-in:
-        #      r = ex(2, "sleep 8")
-        #      self.assertNone(r.exit_code)
-        #      self.assertEqual(r.output, '')
-        #      self.assertTrue(r.timed_out)
-        #      r, out = ex(2, "sleep 8", old_style_r=True)
-        #      self.assertEqual(r, -9)
+    def test_that_output_temp_file_is_deleted(self):
+        original_tempdir = tempfile.gettempdir()
+        try:
+            tempfile.tempdir = os.path.join(original_tempdir, 'ttotfid')
+            with stfu():
+                os.makedirs(tempfile.tempdir)
+            self.assertEqual([], os.listdir(tempfile.tempdir))
 
-        self.fail("futuristic timeouts")
+            r, out = ex(0, 'echo "hello world"')
+            self.assertEqual(out, "hello world\n")
+            self.assertEqual([], os.listdir(tempfile.tempdir))
+        finally:
+            tempfile.tempdir = original_tempdir
+
 
     @unittest.skip("niy")
     def test_memory_output_buffer(self):
@@ -203,15 +198,30 @@ class ExTest(unittest.TestCase):
     def test_output_buffering(self):
         # make sure lines arrive in a timely manner # note: what does this even mean?  and what about osokine's complaint:
         #  if he's calling out = Ex("long process") ; print out ; long process will have to complete before output is ready.  what else?
+        #
+        #  maybe an interface to allow the caller direct access to stdout/stderr pipes would satisfy this request.
+        #
+
         self.fail("niy")
 
     @unittest.skip("niy")
-    def test_unsafe_input(self):
-        # When using shell=True, pipes.quote() can be used to properly escape whitespace and shell
-        #  metacharacters in strings that are going to be used to construct shell commands.
-        cmd = "rm -rf /something/important"
-        self.fail("niy")
+    def test_futuristic_timeouts(self):
+        # we probably should return -9 for backcompat
+        # but we should also have some way to differentiate between ex's exit code and the subprocesses' exit code
+        #  possible solution: r is an object that is castable to int, but is not an int.
+        #      r, out = ex(2, "sleep 8")
+        #      self.assertEqual(-9, r)
+        #      self.assertTrue(r.timed_out)
+        #
+        #  even better, make the backcompat behavior opt-in:
+        #      r = ex(2, "sleep 8")
+        #      self.assertNone(r.exit_code)
+        #      self.assertEqual(r.output, '')
+        #      self.assertTrue(r.timed_out)
+        #      r, out = ex(2, "sleep 8", old_style_r=True)
+        #      self.assertEqual(r, -9)
 
+        self.fail("futuristic timeouts")
 
 if __name__ == '__main__':
     logger = logging.getLogger('mikep.ex')
