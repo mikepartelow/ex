@@ -193,6 +193,7 @@ class ExTest(unittest.TestCase):
     def test_that_killer_exits(self):
         # 1) after killing the timed-out process
         # 2) if the process completes before timeout
+        # shouldn't be too hard: add a useful "i'm killer and my pid is xyz" debug message, parse the log here, then check for pid.
         self.fail("niy")
 
     @unittest.skip("niy")
