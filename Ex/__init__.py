@@ -56,6 +56,8 @@ def log_wait_raise(logger, process):
 # the original:
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
 
+# TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
+
 def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), memory_buffer=False):
     exit_code, output = None, None
 
@@ -66,7 +68,7 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
     else:
         outfile = tempfile.TemporaryFile()
 
-    with closing(outfile):
+    try:
         if logger is not None:
             logger.info('ex(%d, "%s")', timeout_seconds, command)
 
@@ -81,6 +83,11 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
 
         if memory_buffer is False:
             outfile.seek(0)
-        output = outfile.read() # TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
+            output = outfile.read()
+        else:
+            output = p.stdout.read()
 
         return exit_code, output
+    finally:
+        if memory_buffer is not True:
+            outfile.close()
