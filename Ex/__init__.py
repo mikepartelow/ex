@@ -1,34 +1,63 @@
+# FIXME: pydoc, docstrings (see /usr/lib/python2.7/subprocess.py)
+
+# FIXME: make it work on windows :/
+
 # FIXME:
 # See also POSIX users (Linux, BSD, etc.) are strongly encouraged to install and use the much more recent subprocess32 module
 # instead of the version included with python 2.7. It is a drop in replacement with better behavior in many situations.
 
-import subprocess, multiprocessing, time, signal, os, contextlib, logging, tempfile, pipes, shlex
+import subprocess, multiprocessing, time, signal, os, contextlib, logging, tempfile, pipes, shlex, types
 import psutil
 
-# FIXME: make it work on windows :/
+# the original:
+# def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
+
+# TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
+# TODO: the previous idea of "killmon" is probably useful, if not essential.  a callback that is called periodically, with a True return
+#       resulting in termination of our process
+#
+
+def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), buffer_output_in_memory=False):
+    if logger is not None:
+        logger.info('ex(%d, "%s")', timeout_seconds, command)
+
+    exit_code = None
+    stderr_arg = None if ignore_stderr else subprocess.STDOUT
+
+    with _fancy_spawn(command, stderr_arg, buffer_output_in_memory) as p:
+        with _log_wait_raise(logger, p):
+            if pid_callback is not None:
+                pid_callback(p.pid)
+
+            with _timeout_process(timeout_seconds, p.pid, logger):
+                exit_code = p.wait()
+
+        return exit_code, p.fetch_output()
+
+
 # FIXME: maybe use sudo iff an env var asks for it, OR just blame the OS/user for leaks and demand upgrades.
 #
-def sleepy_killer(sleep_seconds, pid_to_kill, logger):
+def _sleepy_killer(sleep_seconds, pid_to_kill, logger):
     time.sleep(sleep_seconds)
 
-    logger.debug("sleepy_killer beginning massacre of %d family after %d seconds", pid_to_kill, sleep_seconds)
+    logger.debug("_sleepy_killer beginning massacre of %d family after %d seconds", pid_to_kill, sleep_seconds)
 
     parent = psutil.Process(pid_to_kill)
     for child in parent.children(recursive=True):
         child.terminate()
-        logger.debug("sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
+        logger.debug("_sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
         child.wait()
-        logger.debug("sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
+        logger.debug("_sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
 
     parent.terminate()
-    logger.debug("sleepy_killer terminated parent %d", pid_to_kill)
+    logger.debug("_sleepy_killer terminated parent %d", pid_to_kill)
     parent.wait()
-    logger.debug("sleepy_killer waited on parent %d", pid_to_kill)
+    logger.debug("_sleepy_killer waited on parent %d", pid_to_kill)
 
 @contextlib.contextmanager
-def timeout_process(timeout_seconds, pid, logger):
+def _timeout_process(timeout_seconds, pid, logger):
     if timeout_seconds > 0:
-        killer = multiprocessing.Process(target=sleepy_killer, args=(timeout_seconds, pid, logger))
+        killer = multiprocessing.Process(target=_sleepy_killer, args=(timeout_seconds, pid, logger))
         killer.start()
         try:
             yield
@@ -39,7 +68,7 @@ def timeout_process(timeout_seconds, pid, logger):
         yield
 
 @contextlib.contextmanager
-def log_wait_raise(logger, process):
+def _log_wait_raise(logger, process):
     try:
         yield
     except:
@@ -52,49 +81,33 @@ def log_wait_raise(logger, process):
 
         raise
 
-class StrikinglySimilarToAFile(object): pass
+def _pipe_output_reader(self):
+    return self.stdout.read()
+
+def _file_output_reader(self):
+    self._outfile.seek(0)
+    return self._outfile.read()
 
 @contextlib.contextmanager
-def homogenized_output_object(use_pipe):
-    if use_pipe:
-        f = StrikinglySimilarToAFile()
-        f.fileno = subprocess.PIPE
+def _fancy_spawn(command, stderr_arg, buffer_output_in_memory):
+    # this minor monstrosity exists to smooth out the differences between using a subprocess.PIPE and a regular file with Popen
+    #
+    if buffer_output_in_memory is True:
+        outfile = subprocess.PIPE
     else:
-        f = tempfile.TemporaryFile()
+        outfile = tempfile.TemporaryFile()
 
     try:
-        yield f
-    finally:
-        if not use_pipe:
-            f.close()
-
-
-# the original:
-# def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
-
-# TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
-
-def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), buffer_output_in_memory=False):
-    if logger is not None:
-        logger.info('ex(%d, "%s")', timeout_seconds, command)
-
-    exit_code, output = None, None
-    stderr_arg = None if ignore_stderr else subprocess.STDOUT
-
-    with homogenized_output_object(buffer_output_in_memory is True) as outfile:
         p = subprocess.Popen(command, shell=True, stderr=stderr_arg, stdout=outfile)
 
-        with log_wait_raise(logger, p):
-            if pid_callback is not None:
-                pid_callback(p.pid)
-
-            with timeout_process(timeout_seconds, p.pid, logger):
-                exit_code = p.wait()
-
-        if memory_buffer is False:
-            outfile.seek(0)
-            output = outfile.read()
+        if buffer_output_in_memory is True:
+            p.fetch_output = types.MethodType(_pipe_output_reader, p)
         else:
-            output = p.stdout.read()
+            p._outfile = outfile
+            p.fetch_output = types.MethodType(_file_output_reader, p)
 
-        return exit_code, output
+        yield p
+
+    finally:
+        if buffer_output_in_memory is not True:
+            outfile.close()

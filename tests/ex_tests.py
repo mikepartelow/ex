@@ -172,6 +172,10 @@ class ExTest(unittest.TestCase):
 
 
     def test_memory_output_buffer(self):
+        # NOTE : no point in testing performance.  performance testing is a separate issue.
+        #        unit tests are here to ensure the interface *works*.  as long as setting this flag doesn't
+        #        unexpectedly change the behavior, the performance is irrelevant.
+        #
         r, out = ex(0, 'echo "hello world"', buffer_output_in_memory=True)
         self.assertEqual(out, "hello world\n")
 
@@ -184,11 +188,6 @@ class ExTest(unittest.TestCase):
 
         self.assertEqual(2, self.timer.elapsed.seconds)
         self.assertEqual(out, "hello world\n")
-
-        # NOTE : no point in testing performance.  performance testing is a separate issue.
-        #        unit tests are here to ensure the interface *works*.  as long as setting this flag doesn't
-        #        unexpectedly change the behavior, the performance is irrelevant.
-        #
 
     @unittest.skip("niy")
     def test_that_killer_exits(self):
