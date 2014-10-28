@@ -33,6 +33,8 @@ def timeout_process(timeout_seconds, pid, logger):
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
 
 def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex')):
+    exit_code, output = None, None
+
     # FIXME: When using shell=True, pipes.quote() can be used to properly escape whitespace and shell metacharacters in
     #        strings that are going to be used to construct shell commands.
 
@@ -50,14 +52,19 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
         #
         p = subprocess.Popen(command, shell=True, stderr=stderr_arg, stdout=outfile)
 
-        if pid_callback is not None:
-            # FIXME: log and re-raise exceptions here
-            #
-            pid_callback(p.pid)
+        try:
+            if pid_callback is not None:
+                # FIXME: log and re-raise exceptions here
+                #
+                pid_callback(p.pid)
 
-        with timeout_process(timeout_seconds, p.pid, logger):
-            exit_code = p.wait()
+            with timeout_process(timeout_seconds, p.pid, logger):
+                exit_code = p.wait()
+        finally:
+            if exit_code is None:
+                exit_code = p.wait()
 
         outfile.seek(0)
+        output = outfile.read() # TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
 
-        return exit_code, outfile.read()
+        return exit_code, output
