@@ -37,6 +37,7 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
 
 # FIXME: maybe use sudo iff an env var asks for it, OR just blame the OS/user for leaks and demand upgrades.
 #
+# FIXME: can anything be done about the hideous try/except/else cascade?
 def _sleepy_killer(sleep_seconds, pid_to_kill, logger):
     time.sleep(sleep_seconds)
 
@@ -44,15 +45,31 @@ def _sleepy_killer(sleep_seconds, pid_to_kill, logger):
 
     parent = psutil.Process(pid_to_kill)
     for child in parent.children(recursive=True):
-        child.terminate()
-        logger.debug("_sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
-        child.wait()
-        logger.debug("_sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
+        try:
+            child.terminate()
+        except:
+            logger.exception("error while terminating child %d", child.pid)
+        else:
+            logger.debug("_sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
+            try:
+                child.wait()
+            except:
+                logger.exception("error while waiting child %d", child.pid)
+            else:
+                logger.debug("_sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
 
-    parent.terminate()
-    logger.debug("_sleepy_killer terminated parent %d", pid_to_kill)
-    parent.wait()
-    logger.debug("_sleepy_killer waited on parent %d", pid_to_kill)
+    try:
+        parent.terminate()
+    except:
+        logger.exception("error while terminating parent %d", parent.pid)
+    else:
+        logger.debug("_sleepy_killer terminated parent %d", pid_to_kill)
+        try:
+            parent.wait()
+        except:
+            logger.exception("error while waiting parent %d", parent.pid)
+        else:
+            logger.debug("_sleepy_killer waited on parent %d", pid_to_kill)
 
 @contextlib.contextmanager
 def _timeout_process(timeout_seconds, pid, logger):
