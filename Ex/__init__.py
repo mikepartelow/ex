@@ -2,21 +2,28 @@
 # See also POSIX users (Linux, BSD, etc.) are strongly encouraged to install and use the much more recent subprocess32 module
 # instead of the version included with python 2.7. It is a drop in replacement with better behavior in many situations.
 
-import subprocess, multiprocessing, time, signal, os, contextlib, logging
-import tempfile
+import subprocess, multiprocessing, time, signal, os, contextlib, logging, tempfile
+import psutil
 
 # FIXME: make it work on windows :/
-#        see how subprocess implements terminate() for windows, and do that.  or if possible through some magic,
-#        call subprocess.Popen.terminate() directly and let them maintain the if/else logic
-#       don't forget child procs
-#       maybe use sudo iff an env var asks for it
+# FIXME: maybe use sudo iff an env var asks for it, OR just blame the OS/user for leaks and demand upgrades.
 #
 def sleepy_killer(sleep_seconds, pid_to_kill, logger):
-    # FIXME: kill child processes also
-    #
     time.sleep(sleep_seconds)
-    logger.debug("sleepy_killer killing %d after %d seconds", pid_to_kill, sleep_seconds)
-    os.kill(pid_to_kill, signal.SIGKILL)
+
+    logger.debug("sleepy_killer beginning massacre of %d family after %d seconds", pid_to_kill, sleep_seconds)
+
+    parent = psutil.Process(pid_to_kill)
+    for child in parent.children(recursive=True):
+        child.terminate()
+        logger.debug("sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
+        child.wait()
+        logger.debug("sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
+
+    parent.terminate()
+    logger.debug("sleepy_killer terminated parent %d", pid_to_kill)
+    parent.wait()
+    logger.debug("sleepy_killer waited on parent %d", pid_to_kill)
 
 @contextlib.contextmanager
 def timeout_process(timeout_seconds, pid, logger):
