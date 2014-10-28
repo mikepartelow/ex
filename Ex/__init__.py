@@ -23,11 +23,28 @@ def timeout_process(timeout_seconds, pid, logger):
     if timeout_seconds > 0:
         killer = multiprocessing.Process(target=sleepy_killer, args=(timeout_seconds, pid, logger))
         killer.start()
-        yield
-        killer.terminate()
-        killer.join()
+        try:
+            yield
+        finally:
+            killer.terminate()
+            killer.join()
     else:
         yield
+
+@contextlib.contextmanager
+def log_wait_raise(logger, process):
+    try:
+        yield
+    except:
+        if logger is not None:
+            logger.exception("ex exception")
+
+        if process.poll() is None:
+            process.terminate()
+            process.wait()
+
+        raise
+
 
 # the original:
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
@@ -48,20 +65,13 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
         if logger is not None:
             logger.info('ex(%d, "%s")', timeout_seconds, command)
 
-        # FIXME: don't leak the process, always wait() on it
-        #
         p = subprocess.Popen(command, shell=True, stderr=stderr_arg, stdout=outfile)
 
-        try:
+        with log_wait_raise(logger, p):
             if pid_callback is not None:
-                # FIXME: log and re-raise exceptions here
-                #
                 pid_callback(p.pid)
 
             with timeout_process(timeout_seconds, p.pid, logger):
-                exit_code = p.wait()
-        finally:
-            if exit_code is None:
                 exit_code = p.wait()
 
         outfile.seek(0)

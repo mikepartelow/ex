@@ -125,6 +125,19 @@ class ExTest(unittest.TestCase):
         log_text = open(self.LOG_PATH).read()
         self.assertIn(str(pm.pid), log_text)
 
+    def test_pid_callback_exception_handling(self):
+        self.logger.addHandler(logging.FileHandler(self.LOG_PATH))
+        self.logger.setLevel(logging.DEBUG)
+
+        with timed(self.timer):
+            with self.assertRaises(ZeroDivisionError):
+                r, out = ex(0, "sleep 8", pid_callback=lambda x: 2/0)
+
+        self.assertEqual(0, self.timer.elapsed.seconds)
+        log_text = open(self.LOG_PATH).read()
+        self.assertIn('ZeroDivisionError', log_text)
+
+
     @unittest.skip("niy")
     def test_futuristic_timeouts(self):
         # we probably should return -9 for backcompat
@@ -180,7 +193,7 @@ class ExTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # logger = logging.getLogger('mikep.ex')
+    logger = logging.getLogger('mikep.ex')
     # logger.setLevel(logging.DEBUG)
     # logger.addHandler(logging.StreamHandler())
 
