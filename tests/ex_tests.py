@@ -171,22 +171,24 @@ class ExTest(unittest.TestCase):
             tempfile.tempdir = original_tempdir
 
 
-    @unittest.skip("niy")
     def test_memory_output_buffer(self):
+        r, out = ex(0, 'echo "hello world"', memory_buffer=True)
+        self.assertEqual(out, "hello world\n")
+
+        r, out = ex(0, 'echo "hello world" 1>&2 ; echo "goodbye world"', memory_buffer=True)
+        self.assertEqual(out, "hello world\ngoodbye world\n")
+
+        with timed(self.timer):
+            # we have to ignore stderr here because bash prints out a termination message
+            r, out = ex(2, 'echo "hello world" ; sleep 4', ignore_stderr=True, memory_buffer=True)
+
+        self.assertEqual(2, self.timer.elapsed.seconds)
+        self.assertEqual(out, "hello world\n")
+
         # NOTE : no point in testing performance.  performance testing is a separate issue.
         #        unit tests are here to ensure the interface *works*.  as long as setting this flag doesn't
         #        unexpectedly change the behavior, the performance is irrelevant.
         #
-
-        # opt-in to using a pipe instead of a temp file for output buffer.
-        #   test stderr
-        #   test timeout
-        #     exits in time
-        #     returns output
-        # verify (how?) no file created
-        #
-        self.fail("niy")
-
 
     @unittest.skip("niy")
     def test_that_killer_exits(self):
