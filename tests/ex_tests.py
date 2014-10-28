@@ -172,15 +172,15 @@ class ExTest(unittest.TestCase):
 
 
     def test_memory_output_buffer(self):
-        r, out = ex(0, 'echo "hello world"', memory_buffer=True)
+        r, out = ex(0, 'echo "hello world"', buffer_output_in_memory=True)
         self.assertEqual(out, "hello world\n")
 
-        r, out = ex(0, 'echo "hello world" 1>&2 ; echo "goodbye world"', memory_buffer=True)
+        r, out = ex(0, 'echo "hello world" 1>&2 ; echo "goodbye world"', buffer_output_in_memory=True)
         self.assertEqual(out, "hello world\ngoodbye world\n")
 
         with timed(self.timer):
             # we have to ignore stderr here because bash prints out a termination message
-            r, out = ex(2, 'echo "hello world" ; sleep 4', ignore_stderr=True, memory_buffer=True)
+            r, out = ex(2, 'echo "hello world" ; sleep 4', ignore_stderr=True, buffer_output_in_memory=True)
 
         self.assertEqual(2, self.timer.elapsed.seconds)
         self.assertEqual(out, "hello world\n")

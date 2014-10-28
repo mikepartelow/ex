@@ -52,26 +52,36 @@ def log_wait_raise(logger, process):
 
         raise
 
+class StrikinglySimilarToAFile(object): pass
+
+@contextlib.contextmanager
+def homogenized_output_object(use_pipe):
+    if use_pipe:
+        f = StrikinglySimilarToAFile()
+        f.fileno = subprocess.PIPE
+    else:
+        f = tempfile.TemporaryFile()
+
+    try:
+        yield f
+    finally:
+        if not use_pipe:
+            f.close()
+
 
 # the original:
 # def ex(timeout, cmd, save_stdout=True, save_stderr=True, killmon=None, pidcb=None, no_log=True, env=None, username=None):
 
 # TODO: in futuristic mode, don't read() -- let the caller do it if he cares! (will conflict with closing())
 
-def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), memory_buffer=False):
-    exit_code, output = None, None
+def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=logging.getLogger('mikep.ex'), buffer_output_in_memory=False):
+    if logger is not None:
+        logger.info('ex(%d, "%s")', timeout_seconds, command)
 
+    exit_code, output = None, None
     stderr_arg = None if ignore_stderr else subprocess.STDOUT
 
-    if memory_buffer is True:
-        outfile = subprocess.PIPE
-    else:
-        outfile = tempfile.TemporaryFile()
-
-    try:
-        if logger is not None:
-            logger.info('ex(%d, "%s")', timeout_seconds, command)
-
+    with homogenized_output_object(buffer_output_in_memory is True) as outfile:
         p = subprocess.Popen(command, shell=True, stderr=stderr_arg, stdout=outfile)
 
         with log_wait_raise(logger, p):
@@ -88,6 +98,3 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
             output = p.stdout.read()
 
         return exit_code, output
-    finally:
-        if memory_buffer is not True:
-            outfile.close()
