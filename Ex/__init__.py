@@ -29,7 +29,7 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
             if pid_callback is not None:
                 pid_callback(p.pid)
 
-            with _timeout_process(timeout_seconds, p.pid, logger):
+            with _terminate_process_after_timeout(timeout_seconds, p.pid, logger):
                 exit_code = p.wait()
 
         return exit_code, p.fetch_output()
@@ -81,7 +81,7 @@ def _sleepy_killer(sleep_seconds, pid_to_kill, logger):
             logger.debug("_sleepy_killer waited on parent %d", pid_to_kill)
 
 @contextlib.contextmanager
-def _timeout_process(timeout_seconds, pid, logger):
+def _terminate_process_after_timeout(timeout_seconds, pid, logger):
     if timeout_seconds > 0:
         killer = multiprocessing.Process(target=_sleepy_killer, args=(timeout_seconds, pid, logger))
         killer.start()
