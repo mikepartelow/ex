@@ -80,6 +80,27 @@ class ExTest(unittest.TestCase):
 
         self.assertEqual(2, self.timer0.elapsed.seconds)
 
+        # we probably should return -9 for backcompat
+        # but we should also have some way to differentiate between ex's exit code and the subprocesses' exit code
+        #  possible solution: r is an object that is castable to int, but is not an int.
+        #      r, out = ex(2, "sleep 8")
+        #      self.assertEqual(-9, r)
+        #      self.assertTrue(r.timed_out)
+        #
+        #  even better, make the backcompat behavior opt-in:
+        #      r = ex(2, "sleep 8")
+        #      self.assertNone(r.exit_code)
+        #      self.assertEqual(r.output, '')
+        #      self.assertTrue(r.timed_out)
+        #      r, out = ex(2, "sleep 8", old_style_r=True)
+        #      self.assertEqual(r, -9)
+
+        self.fail("futuristic timeouts")
+
+    def test_timeout_output(self):
+        with timed(self.timer0):
+            r, out = ex(2, 'echo "hello world" ; sleep 8')
+
     def test_no_timeout(self):
         self.fail("niy")
 
