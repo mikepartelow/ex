@@ -137,6 +137,24 @@ class ExTest(unittest.TestCase):
         log_text = open(self.LOG_PATH).read()
         self.assertIn('ZeroDivisionError', log_text)
 
+    def test_child_process_death(self):
+        child_count = 2
+        pid_dir = tempfile.mkdtemp()
+
+        with timed(self.timer):
+            r, out = ex(2, "python tests/breeder.py {} {}".format(child_count, pid_dir))
+
+        self.assertEqual(2, self.timer.elapsed.seconds)
+        for pid_file in os.listdir(pid_dir):
+            pid = int(pid_file)
+
+            pid_absent = False
+            try:
+                os.kill(pid, 0)
+            except OSError as e:
+                pid_absent = (e.errno == 3)
+
+            self.assertTrue(pid_absent)
 
     @unittest.skip("niy")
     def test_futuristic_timeouts(self):
@@ -168,9 +186,6 @@ class ExTest(unittest.TestCase):
         #
         self.fail("niy")
 
-    @unittest.skip("niy")
-    def test_killing_of_child_processes(self):
-        self.fail("niy")
 
     @unittest.skip("niy")
     def test_that_killer_exits(self):
