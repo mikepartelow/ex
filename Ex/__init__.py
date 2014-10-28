@@ -39,25 +39,34 @@ def ex(timeout_seconds, command, ignore_stderr=False, pid_callback=None, logger=
 #
 # FIXME: can anything be done about the hideous try/except/else cascade?
 def _sleepy_killer(sleep_seconds, pid_to_kill, logger):
+    logger.debug("_sleepy_killer's pid: %d", os.getpid())
     time.sleep(sleep_seconds)
 
-    logger.debug("_sleepy_killer beginning massacre of %d family after %d seconds", pid_to_kill, sleep_seconds)
-
     parent = psutil.Process(pid_to_kill)
-    for child in parent.children(recursive=True):
+    children = parent.children(recursive=True)
+    child_pids = map(lambda p: p.pid, children)
+
+    logger.debug("_sleepy_killer beginning massacre of %d family (%s) after %d seconds", pid_to_kill, str(child_pids), sleep_seconds)
+
+    # terminate the child processes "bottom up"
+    for child in reversed(children):
+        logger.debug("_sleepy_killer terminating child %d of %d family", child.pid, pid_to_kill)
         try:
             child.terminate()
         except:
             logger.exception("error while terminating child %d", child.pid)
-        else:
-            logger.debug("_sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
-            try:
-                child.wait()
-            except:
-                logger.exception("error while waiting child %d", child.pid)
-            else:
-                logger.debug("_sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
 
+    # to avoid deadlocks, wait until all child processes have been terminated before waiting on any of them.
+    for child in children:
+        logger.debug("_sleepy_killer terminated child %d of %d family", child.pid, pid_to_kill)
+        try:
+            child.wait()
+        except:
+            logger.exception("error while waiting child %d", child.pid)
+        else:
+            logger.debug("_sleepy_killer waited child %d of %d family", child.pid, pid_to_kill)
+
+    logger.debug("_sleepy_killer terminating parent %d", pid_to_kill)
     try:
         parent.terminate()
     except:
@@ -79,7 +88,10 @@ def _timeout_process(timeout_seconds, pid, logger):
         try:
             yield
         finally:
-            killer.terminate()
+            try:
+                killer.terminate()
+            except NoSuchProcess:
+                pass
             killer.join()
     else:
         yield

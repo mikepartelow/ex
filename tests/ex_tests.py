@@ -226,7 +226,7 @@ class ExTest(unittest.TestCase):
 
 if __name__ == '__main__':
     logger = logging.getLogger('mikep.ex')
-    # logger.setLevel(logging.DEBUG)
-    # logger.addHandler(logging.StreamHandler())
+    #logger.setLevel(logging.DEBUG)
+    #logger.addHandler(logging.StreamHandler())
 
     unittest.main()
