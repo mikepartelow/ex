@@ -101,12 +101,18 @@ class ExTest(unittest.TestCase):
         with timed(self.timer0):
             r, out = ex(2, 'echo "hello world" ; sleep 8')
 
+        self.assertEqual(2, self.timer0.elapsed.seconds)
+        self.assertEqual(out, "hello world\n")
+
     def test_no_timeout(self):
         self.fail("niy")
 
     def test_output_buffered_up_to_timeout(self):
         # make sure we get *some* output when killing a timedout process
         # check that we get *all expected* output in that case
+        self.fail("niy")
+
+    def test_killing_of_child_processes(self):
         self.fail("niy")
 
 if __name__ == '__main__':
